@@ -1,23 +1,24 @@
 import type { DirOptions, FileOptions, HydrateFn } from './types';
-import fs from 'fs';
 import path from 'path';
+import fs from 'fs/promises';
+import { existsSync } from 'fs';
 
 import { readTime, structure, table } from './compute';
 import { construct, supplant } from './utils';
 
-export function compile<I, O extends Record<string, any> = I>(
+export async function compile<I, O extends Record<string, any> = I>(
 	options: string | FileOptions,
 	hydrate?: HydrateFn<I, O>
-): O | undefined {
+): Promise<O | undefined> {
 	const { entry, minimal = !1, exclude = [] } =
 		typeof options !== 'string' ? options : { entry: options };
 
-	if (!fs.existsSync(entry)) {
+	if (!existsSync(entry)) {
 		console.warn(`Skipping "${entry}", path does not exists`);
 		return;
 	}
 
-	const crude = fs.readFileSync(entry, 'utf-8').trim();
+	const crude = (await fs.readFile(entry, 'utf-8')).trim();
 	const match = crude.match(/---\r?\n([\s\S]+?)\r?\n---/);
 	const breadcrumb = entry.split(/[/\\]/);
 
@@ -41,25 +42,29 @@ export function compile<I, O extends Record<string, any> = I>(
 	return result as O;
 }
 
-export function traverse<I, O extends Record<string, any> = I>(
+export async function traverse<I, O extends Record<string, any> = I>(
 	options: string | DirOptions,
 	hydrate?: HydrateFn<I, O>
-): Array<O> {
+): Promise<Array<O>> {
 	const { entry, recurse = !1, extensions = ['.md'], ...config } =
 		typeof options !== 'string' ? options : { entry: options };
 
-	if (!fs.existsSync(entry)) {
+	if (!existsSync(entry)) {
 		console.warn(`Skipping "${entry}", path does not exists`);
 		return [];
 	}
 
-	const backpack = fs.readdirSync(entry).map((name) => {
-		const pathname = path.join(entry, name);
-		const opts = { entry: pathname, recurse, extensions, ...config };
-		if (recurse && fs.lstatSync(pathname).isDirectory()) return traverse(opts, hydrate);
-		else if (extensions.some((e) => name.endsWith(e))) return compile(opts, hydrate);
-		else return;
-	});
+	const initial = await fs.readdir(entry);
+	const backpack = await Promise.all(
+		initial.map(async (name) => {
+			const pathname = path.join(entry, name);
+			const status = await fs.stat(pathname);
+			const opts = { entry: pathname, recurse, extensions, ...config };
+			if (recurse && status.isDirectory()) return traverse(opts, hydrate);
+			else if (extensions.some((e) => name.endsWith(e))) return compile(opts, hydrate);
+			else return;
+		})
+	);
 
 	return (recurse ? backpack.flat(Number.POSITIVE_INFINITY) : backpack).filter(
 		(i): i is O => !!i && (typeof i.length === 'undefined' || !!i.length)
