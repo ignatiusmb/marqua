@@ -11,12 +11,16 @@ export type FileOptions = {
 	exclude?: Array<string>;
 };
 
-export type DirOptions<Output extends object = {}> = FileOptions & {
+export type DirOptions<
+	Output extends object = {},
+	Default = keyof Output extends never ? Record<string, any> : Output
+> = FileOptions & {
 	entry: string;
 	recurse?: boolean;
 	extensions?: Array<string>;
-	sort?(
-		x: keyof Output extends never ? Record<string, any> : Output,
-		y: keyof Output extends never ? Record<string, any> : Output
-	): number;
+	sort?(x: Default, y: Default): number;
+	siblings?: {
+		item(input: { prev?: Default; next?: Default }): any;
+		breakpoint?(next: Default): boolean;
+	};
 };
