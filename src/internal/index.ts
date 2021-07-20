@@ -70,6 +70,7 @@ export function traverse<
 		recurse = false,
 		extensions = ['.md'],
 		sort = undefined,
+		siblings = undefined,
 		...config
 	} = typeof options !== 'string' ? options : { entry: options };
 
@@ -90,5 +91,16 @@ export function traverse<
 		(i): i is Output => !!i && (Array.isArray(i) ? !!i.length : !!Object.keys(i).length)
 	);
 
-	return sort ? items.sort(sort as any) : items;
+	const ordered = sort ? items.sort(sort as any) : items;
+
+	if (siblings && siblings.item) {
+		const breakpoint = siblings.breakpoint || (() => false);
+		for (let i = 0; i < ordered.length; i += 1) {
+			const [prev, next] = [ordered[i - 1], ordered[i + 1]];
+			ordered[i]['siblings'] = siblings.item({ prev, next });
+			if (!next || breakpoint(next)) break;
+		}
+	}
+
+	return ordered;
 }
